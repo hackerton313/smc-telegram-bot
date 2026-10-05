@@ -1,0 +1,17 @@
+{
+  "name": "smc-telegram-bot",
+  "version": "1.0.0",
+  "description": "SMC Signals Bot - Auto-posting to Telegram",
+  "main": "scripts/main.js",
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/main.js"
+  },
+  "dependencies": {
+    "playwright": "^1.49.0",
+    "axios": "^1.7.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

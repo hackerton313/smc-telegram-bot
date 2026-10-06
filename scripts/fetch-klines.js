@@ -1,18 +1,14 @@
 // scripts/fetch-klines.js
-// يجلب بيانات الشموع من Binance US
+// جلب بيانات الشموع من Binance US — يدعم دفعتين
 
 import axios from 'axios';
 
 const BINANCE_URL = process.env.BINANCE_API_URL || 'https://api.binance.us';
 
 /**
- * يجلب آخر N شمعة من Binance
- * @param {string} symbol - مثل BTCUSDT
- * @param {string} interval - مثل 1h
- * @param {number} limit - عدد الشموع (الحد الأقصى 1000)
- * @returns {Promise<Array>} - مصفوفة الشموع
+ * يجلب دفعة واحدة من Binance
  */
-export async function fetchKlines(symbol, interval, limit = 500) {
+export async function fetchKlinesBatch(symbol, interval, limit = 1000, endTime = null) {
   const url = `${BINANCE_URL}/api/v3/klines`;
   const params = {
     symbol: symbol,
@@ -20,11 +16,15 @@ export async function fetchKlines(symbol, interval, limit = 500) {
     limit: limit,
   };
 
+  if (endTime !== null) {
+    params.endTime = endTime;
+  }
+
   try {
     const response = await axios.get(url, { params, timeout: 30000 });
-    
+
     if (!Array.isArray(response.data) || response.data.length === 0) {
-      throw new Error(`لا توجد بيانات لـ ${symbol}`);
+      return [];
     }
 
     return response.data;
@@ -36,8 +36,6 @@ export async function fetchKlines(symbol, interval, limit = 500) {
 
 /**
  * يحوّل بيانات الشموع إلى كائنات
- * @param {Array} klines - بيانات Binance
- * @returns {Array} - مصفوفة كائنات
  */
 export function klinesToArray(klines) {
   if (!klines) return [];
@@ -53,47 +51,40 @@ export function klinesToArray(klines) {
 }
 
 /**
- * يجلب البيانات ككائن DataFrame (مع دوال مساعدة)
- * @param {string} symbol 
- * @param {string} interval 
- * @param {number} limit 
- * @returns {Promise<Object|null>}
+ * يجلب 1001 شمعة (دفعتان)
  */
-export async function fetchDataFrame(symbol, interval, limit = 500) {
-  const klines = await fetchKlines(symbol, interval, limit);
-  if (!klines) return null;
+export async function fetchDataFrame(symbol, interval, totalLimit = 1001) {
+  console.log(`  📥 جلب ${totalLimit} شمعة لـ ${symbol}...`);
 
-  const data = klinesToArray(klines);
-  return new DataFrame(data);
-}
-
-/**
- * فئة DataFrame - تحاكي pandas
- */
-export class DataFrame {
-  constructor(data) {
-    this.data = data;
-    this.length = data.length;
+  // الدفعة الأولى: 1000 شمعة (الأحدث)
+  const batch1 = await fetchKlinesBatch(symbol, interval, 1000);
+  if (!batch1 || batch1.length === 0) {
+    console.log(`  ⚠️ لا توجد بيانات`);
+    return null;
   }
 
-  // الوصول للعناصر
-  at(index) {
-    return this.data[index];
+  console.log(`    ✅ دفعة 1: ${batch1.length} شمعة`);
+
+  let allKlines = [...batch1];
+
+  // إذا احتجنا أكثر من 1000
+  if (totalLimit > 1000 && batch1.length === 1000) {
+    // الدفعة الثانية: 1001-1000 = 1 شمعة (قبل الدفعة الأولى)
+    const endTime = batch1[0][0] - 1;
+    const batch2 = await fetchKlinesBatch(symbol, interval, 1, endTime);
+
+    if (batch2 && batch2.length > 0) {
+      console.log(`    ✅ دفعة 2: ${batch2.length} شمعة`);
+      allKlines = [...batch2, ...batch1];
+    }
   }
 
-  // الوصول لعمود
-  col(name) {
-    return this.data.map(row => row[name]);
-  }
+  // تحويل
+  const data = klinesToArray(allKlines);
+  console.log(`    📊 الإجمالي: ${data.length} شمعة`);
 
-  // قيمة في صف/عمود
-  get(index, name) {
-    if (index < 0 || index >= this.length) return null;
-    return this.data[index][name];
-  }
-
-  // شريحة
-  slice(start, end) {
-    return new DataFrame(this.data.slice(start, end));
-  }
+  return {
+    data: data,
+    length: data.length,
+  };
 }

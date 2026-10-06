@@ -1,0 +1,42 @@
+name: SMC Telegram Bot
+
+on:
+  schedule:
+    # كل ساعة (في الدقيقة 5)
+    - cron: '5 * * * *'
+  workflow_dispatch:  # تشغيل يدوي
+
+jobs:
+  post-signals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium --with-deps
+
+      - name: Run SMC Bot
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          BINANCE_API_URL: ${{ secrets.BINANCE_API_URL }}
+        run: node scripts/main.js
+
+      - name: Commit posted_setups.json
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add posted_setups.json || true
+          git diff --quiet && git diff --staged --quiet || git commit -m "Update posted_setups [skip ci]"
+          git push || true

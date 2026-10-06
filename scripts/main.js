@@ -88,7 +88,7 @@ async function main() {
 
     try {
       const symbol = `${coin}USDT`;
-      const df = await fetchDataFrame(symbol, TIMEFRAME, 500);
+      const df = await fetchDataFrame(symbol, TIMEFRAME, 1001);
 
       if (!df || df.length < 100) {
         console.log(`  ⚠️ بيانات غير كافية`);

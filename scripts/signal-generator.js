@@ -1,5 +1,5 @@
 // scripts/signal-generator.js
-// توليد الإشارات — ترسل عند تكوّن FVG
+// توليد الإشارات — maxAgeHours = 1.5
 
 import { findSwings, findEqualLevels } from './indicators.js';
 import { detectSetups } from './setup-detector.js';
@@ -15,14 +15,11 @@ const CONFIG = {
   minRr: 1.5,
   maxRr: 10.0,
   minTpPct: 0.005,
-  maxAgeBars: 3,   // عمر FVG (آخر 3 شموع)
+  maxAgeHours: 1.5,   // عمر FVG الأقصى (ساعة ونصف)
 };
 
 /**
- * توليد إشارة حية من البيانات
- * @param {Array} df - مصفوفة الشموع
- * @param {number} currentBar - فهرس آخر شمعة
- * @returns {Object|null}
+ * توليد إشارة حية
  */
 export function generateSignal(df, currentBar) {
   if (df.length < 100) return null;
@@ -45,12 +42,15 @@ export function generateSignal(df, currentBar) {
 
   // 4. فلترة
   const validSetups = [];
+  const currentTime = df[currentBar].time;
 
   for (const setup of setups) {
-    // 4أ. عمر FVG
-    const age = currentBar - setup.fvg_idx;
-    if (age > CONFIG.maxAgeBars) continue;
-    if (age < 0) continue;
+    // 4أ. عمر FVG (بالساعات)
+    const fvgTime = df[setup.fvg_idx].time;
+    const ageHours = (currentTime - fvgTime) / (1000 * 60 * 60);
+
+    if (ageHours < 0) continue;
+    if (ageHours > CONFIG.maxAgeHours) continue;
 
     // 4ب. حجم FVG
     const fvgSize = (setup.fvg_top - setup.fvg_bottom) / setup.fvg_bottom;
@@ -72,7 +72,7 @@ export function generateSignal(df, currentBar) {
     const rr = tpPct / slPct;
     if (rr < CONFIG.minRr || rr > CONFIG.maxRr) continue;
 
-    // 4و. فحص اتجاه صحيح
+    // 4و. فحص الاتجاه
     if (setup.type === 'LONG' && (sl >= entry || tp <= entry)) continue;
     if (setup.type === 'SHORT' && (sl <= entry || tp >= entry)) continue;
 
@@ -81,14 +81,14 @@ export function generateSignal(df, currentBar) {
       sl_pct: slPct * 100,
       tp_pct: tpPct * 100,
       rr: rr,
-      age: age,
+      age_hours: ageHours,
     });
   }
 
   if (validSetups.length === 0) return null;
 
   // 5. اختر الأحدث
-  validSetups.sort((a, b) => a.age - b.age);
+  validSetups.sort((a, b) => a.age_hours - b.age_hours);
   return validSetups[0];
 }
 
